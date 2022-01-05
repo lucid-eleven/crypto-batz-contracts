@@ -352,39 +352,50 @@ describe("CryptoBatz contract", function () {
       let signature = await whitelistSigner._signTypedData(domain, types, value1);
 
       expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 1, 2, {value: presaleMintPrice})).to.be.revertedWith("Invalid signature");
-      expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 3, 3, {value: presaleMintPrice})).to.be.revertedWith("Invalid signature");
+      expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 3, 3, {value: presaleMintPrice.mul(3)})).to.be.revertedWith("Invalid signature");
     });
 
-    it("Should allow presale minting up to the max supply limit", async function () {
+    it("Should allow presale minting up to the presale supply limit", async function () {
       this.timeout(0);
-      let signature = await whitelistSigner._signTypedData(domain, types, value1);
-      let signature2 = await whitelistSigner._signTypedData(domain, types, value2);
+      let tempValue1 = { buyer:addrs[0].address, limit:2000 };
+      let tempValue2 = { buyer:addrs[1].address, limit:2000 };
+      let tempValue3 = { buyer:addrs[2].address, limit:2000 };
+      let tempValue4 = { buyer:addrs[3].address, limit:2000 };
+      let tempValue5 = { buyer:addrs[4].address, limit:2000 };
+      let signature1 = await whitelistSigner._signTypedData(domain, types, tempValue1);
+      let signature2 = await whitelistSigner._signTypedData(domain, types, tempValue2);
+      let signature3 = await whitelistSigner._signTypedData(domain, types, tempValue3);
+      let signature4 = await whitelistSigner._signTypedData(domain, types, tempValue4);
+      let signature5 = await whitelistSigner._signTypedData(domain, types, tempValue5);
 
-      for (let i = 0; i < 194; i++) {
-        await CryptoBatzContract.connect(addr1).buyPresale(signature, 20, {value: presaleMintPrice.mul(20)});
-        await CryptoBatzContract.connect(addr2).buyPresale(signature2, 20, {value: presaleMintPrice.mul(20)});
+      for (let i = 0; i < Math.floor(presaleSupplyLimit / 500); i++) {
+        await CryptoBatzContract.connect(addrs[0]).buyPresale(signature1, 100, 2000, {value: presaleMintPrice.mul(100)});
+        await CryptoBatzContract.connect(addrs[1]).buyPresale(signature2, 100, 2000, {value: presaleMintPrice.mul(100)});
+        await CryptoBatzContract.connect(addrs[2]).buyPresale(signature3, 100, 2000, {value: presaleMintPrice.mul(100)});
+        await CryptoBatzContract.connect(addrs[3]).buyPresale(signature4, 100, 2000, {value: presaleMintPrice.mul(100)});
+        await CryptoBatzContract.connect(addrs[4]).buyPresale(signature5, 100, 2000, {value: presaleMintPrice.mul(100)});
       }
 
-      await CryptoBatzContract.connect(addr1).buyPresale(signature, 17, {value: presaleMintPrice.mul(17)});
+      await CryptoBatzContract.connect(addrs[0]).buyPresale(signature1, (presaleSupplyLimit % 500), 2000, {value: presaleMintPrice.mul((presaleSupplyLimit % 500))});
 
-      await expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 1, {value: presaleMintPrice})).to.be.revertedWith('Not enough tokens left');
-      await expect(CryptoBatzContract.connect(addr2).buyPresale(signature2, 1, {value: presaleMintPrice})).to.be.revertedWith('Not enough tokens left');
-      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(7777);
+      await expect(CryptoBatzContract.connect(addrs[1]).buyPresale(signature2, 1, 2000, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
+      await expect(CryptoBatzContract.connect(addrs[2]).buyPresale(signature3, 1, 2000, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
+      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(presaleSupplyLimit);
     });
 
-    it("Should require 0.04ETH per token for presale minting", async function () {
+    it(`Should require ${ethers.utils.formatEther(presaleMintPrice)}ETH per token for presale minting`, async function () {
       let sendPrice = presaleMintPrice.sub(1);
 
       let signature1 = await whitelistSigner._signTypedData(domain, types, value1);
       let signature2 = await whitelistSigner._signTypedData(domain, types, value2);
 
-      await expect(CryptoBatzContract.connect(addr1).buyPresale(signature1, 1, {value: sendPrice})).to.be.revertedWith("Incorrect payment");
+      await expect(CryptoBatzContract.connect(addr1).buyPresale(signature1, 1, 1, {value: sendPrice})).to.be.revertedWith("Incorrect payment");
       expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(0);
 
-      await CryptoBatzContract.connect(addr2).buyPresale(signature2, 1, {value: presaleMintPrice});
+      await CryptoBatzContract.connect(addr1).buyPresale(signature1, 1, 1, {value: presaleMintPrice});
       expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(1);
 
-      await CryptoBatzContract.connect(addr1).buyPresale(signature1, 3, {value: presaleMintPrice.mul(3)});
+      await CryptoBatzContract.connect(addr2).buyPresale(signature2, 3, 3, {value: presaleMintPrice.mul(3)});
       expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(4);
     });
 
@@ -432,8 +443,8 @@ describe("CryptoBatz contract", function () {
       await CryptoBatzContract.connect(addrs[0]).buy(20, {value: presaleMintPrice.mul(20)});
       await CryptoBatzContract.connect(addrs[1]).buy(17, {value: presaleMintPrice.mul(17)});
 
-      await expect(CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enough tokens left');
-      await expect(CryptoBatzContract.connect(addr2).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enough tokens left');
+      await expect(CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
+      await expect(CryptoBatzContract.connect(addr2).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
       expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(7777);
     });
 
@@ -455,10 +466,10 @@ describe("CryptoBatz contract", function () {
     beforeEach(deployContract);
 
     it("Should allow the contract owner to withdraw the entire balance in the contract", async function () {
-      await CryptoBatzContract.connect(addr1).buy(5, {value: presaleMintPrice.mul(5)});
-      await CryptoBatzContract.connect(addr2).buy(5, {value: presaleMintPrice.mul(5)});
+      await CryptoBatzContract.connect(addr1).buy(5, {value: auctionBottomPrice.mul(5)});
+      await CryptoBatzContract.connect(addr2).buy(5, {value: auctionBottomPrice.mul(5)});
 
-      let expectedBalance = presaleMintPrice.mul(10);
+      let expectedBalance = auctionBottomPrice.mul(10);
 
       expect(await ethers.provider.getBalance(CryptoBatzContract.address)).to.equal(expectedBalance)
 
@@ -473,12 +484,10 @@ describe("CryptoBatz contract", function () {
             ethers.constants.NegativeOne.mul(expectedBalance)
           ]);
 
-      expect(await ethers.provider.getBalance("0x9E5fec6141578296d33cF64912f666F49913Ee26")).to.equal(expectedBalance.mul(315).div(1000));
-      expect(await ethers.provider.getBalance("0x95f62b23F8B426E750372632c8F034dC89cBaE68")).to.equal(expectedBalance.mul(315).div(1000));
-      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(100).div(1000));
-      expect(await ethers.provider.getBalance("0xdeF4274dA60CEF85402731F0013E5C67fC3D5c2e")).to.equal(expectedBalance.mul(20).div(1000));
-      expect(await ethers.provider.getBalance("0x69F5CEc1DDC1fFC5Fa03e32FFE415bB92fB9ac67")).to.equal(expectedBalance.mul(50).div(1000));
-      expect(await ethers.provider.getBalance("0x535E9E9E73b621b9aC4EE05550bfda96CB87E48f")).to.equal(expectedBalance.mul(200).div(1000));
+      expect(await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211")).to.equal(expectedBalance.mul(50).div(100));
+      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(35).div(100));
+      expect(await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5")).to.equal(expectedBalance.mul(10).div(100));
+      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(5).div(100));
     });
 
     it("Should allow direct transfers into the contract and withdrawal", async function () {
@@ -493,12 +502,10 @@ describe("CryptoBatz contract", function () {
 
       expect(await ethers.provider.getBalance(CryptoBatzContract.address)).to.equal(expectedBalance)
 
-      let bal1 = await ethers.provider.getBalance("0x9E5fec6141578296d33cF64912f666F49913Ee26");
-      let bal2 = await ethers.provider.getBalance("0x95f62b23F8B426E750372632c8F034dC89cBaE68");
-      let bal3 = await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d");
-      let bal4 = await ethers.provider.getBalance("0xdeF4274dA60CEF85402731F0013E5C67fC3D5c2e");
-      let bal5 = await ethers.provider.getBalance("0x69F5CEc1DDC1fFC5Fa03e32FFE415bB92fB9ac67");
-      let bal6 = await ethers.provider.getBalance("0x535E9E9E73b621b9aC4EE05550bfda96CB87E48f");
+      let bal1 = await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211");
+      let bal2 = await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0");
+      let bal3 = await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5");
+      let bal4 = await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d");
 
       await expect(await CryptoBatzContract.connect(owner).withdraw())
         .to.changeEtherBalances(
@@ -511,12 +518,10 @@ describe("CryptoBatz contract", function () {
             ethers.constants.NegativeOne.mul(expectedBalance)
           ]);
 
-      expect(await ethers.provider.getBalance("0x9E5fec6141578296d33cF64912f666F49913Ee26")).to.equal(expectedBalance.mul(315).div(1000).add(bal1));
-      expect(await ethers.provider.getBalance("0x95f62b23F8B426E750372632c8F034dC89cBaE68")).to.equal(expectedBalance.mul(315).div(1000).add(bal2));
-      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(100).div(1000).add(bal3));
-      expect(await ethers.provider.getBalance("0xdeF4274dA60CEF85402731F0013E5C67fC3D5c2e")).to.equal(expectedBalance.mul(20).div(1000).add(bal4));
-      expect(await ethers.provider.getBalance("0x69F5CEc1DDC1fFC5Fa03e32FFE415bB92fB9ac67")).to.equal(expectedBalance.mul(50).div(1000).add(bal5));
-      expect(await ethers.provider.getBalance("0x535E9E9E73b621b9aC4EE05550bfda96CB87E48f")).to.equal(expectedBalance.mul(200).div(1000).add(bal6));
+      expect(await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211")).to.equal(expectedBalance.mul(50).div(100).add(bal1));
+      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(35).div(100).add(bal2));
+      expect(await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5")).to.equal(expectedBalance.mul(10).div(100).add(bal3));
+      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(5).div(100).add(bal4));
     });
 
     it("Should fail if there is 0 balance in the contract", async function () {
