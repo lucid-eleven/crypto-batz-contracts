@@ -12,6 +12,8 @@ describe("CryptoBatz contract", function () {
   let addr2;
   let addrs;
 
+  let auctionPrice;
+
   var presaleMintPrice = ethers.utils.parseEther("0.088");
   var auctionStartPrice = ethers.utils.parseEther("0.666");
   var auctionBottomPrice = ethers.utils.parseEther("0.1");
@@ -23,6 +25,7 @@ describe("CryptoBatz contract", function () {
   let presaleEndTime = (+new Date("Thu Jan 20 2022 23:00:00 GMT+0000"))/1000;
   let publicSaleStartTime = (+new Date("Thu Jan 20 2022 23:00:00 GMT+0000"))/1000;
   let publicSaleBottomTime = (+new Date("Fri Jan 21 2022 02:00:00 GMT+0000"))/1000;
+  let publicSaleStepInterval = 300;
 
   const initialSetup = async () => {
     [ owner, whitelistSigner, ancientBatzMinter, addr1, addr2, ...addrs ] = await ethers.getSigners();
@@ -67,6 +70,10 @@ describe("CryptoBatz contract", function () {
       buyer:buyerAddr2,
       limit:3
     };
+  }
+
+  const updatePrice = async () => {
+    auctionPrice = await CryptoBatzContract.getCurrentAuctionPrice();
   }
 
   before(initialSetup);
@@ -306,11 +313,12 @@ describe("CryptoBatz contract", function () {
   describe("Sale progression", function () {
     beforeEach(deployContract);
     beforeEach(setupWhitelistData);
+    beforeEach(updatePrice);
 
     it("Should fail to allow whitelist mint before presale starts", async function () {
       let signature = await whitelistSigner._signTypedData(domain, types, value1);
 
-      await ethers.provider.send('evm_setNextBlockTimestamp', [presaleStartTime - 1000]);
+      await ethers.provider.send('evm_setNextBlockTimestamp', [presaleStartTime - 60]);
 
       await expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 1, 1, {value: presaleMintPrice})).to.be.revertedWith("Presale is not active");
     });
@@ -399,66 +407,142 @@ describe("CryptoBatz contract", function () {
       expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(4);
     });
 
-    it("Should fail to allow public mint before public sale starts", async function () {
-      await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleTimestamp - 1000]);
+    it(`Should return ${auctionStartPrice} for getCurrentAuctionPrice before public sale starts`, async function () {
+      expect(await CryptoBatzContract.getCurrentAuctionPrice()).to.equal(auctionStartPrice);
+    });
 
-      await expect(CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice})).to.be.revertedWith("Sale is not active");
+    it("Should fail to allow rolling the start index before public sale starts", async function () {
+      let provenance = ethers.BigNumber.from(1234);
+
+      await CryptoBatzContract.connect(owner).setProvenance(provenance);
+
+      await expect(CryptoBatzContract.connect(owner).rollStartIndex()).to.be.revertedWith("Too early to roll start index");
+    });
+
+    it("Should fail to allow public mint before public sale starts", async function () {
+      await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleStartTime - 60]);
+      
+      await expect(CryptoBatzContract.connect(addr1).buyPublic(1, {value: auctionPrice})).to.be.revertedWith("Sale is not active");
     });
 
     it("Should allow any wallet to mint during public sale", async function () {
-      await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleTimestamp]);
+      await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleStartTime]);
 
-      await CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice});
-      await CryptoBatzContract.connect(addr2).buy(2, {value: presaleMintPrice.mul(2)});
-      await CryptoBatzContract.connect(addrs[0]).buy(3, {value: presaleMintPrice.mul(3)});
-      await CryptoBatzContract.connect(addrs[4]).buy(4, {value: presaleMintPrice.mul(4)});
+      await CryptoBatzContract.connect(addr1).buyPublic(1, {value: auctionPrice});
+      await CryptoBatzContract.connect(addr2).buyPublic(2, {value: auctionPrice.mul(2)});
+      await CryptoBatzContract.connect(addrs[0]).buyPublic(3, {value: auctionPrice.mul(3)});
 
       expect(await CryptoBatzContract.balanceOf(addrs[0].address)).to.equal(3);
-      expect(await CryptoBatzContract.totalSupply()).to.equal(10);
+      expect(await CryptoBatzContract.totalSupply()).to.equal(6);
+    });
+
+    it("Should fail to allow presale mint after presale ends", async function () {
+      let signature = await whitelistSigner._signTypedData(domain, types, value1);
+      
+      await expect(CryptoBatzContract.connect(addr1).buyPresale(signature, 1, 1, {value: presaleMintPrice})).to.be.revertedWith("Presale is not active")
     });
 
     it("Should enforce transaction limit for public sale", async function () {
-      await CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice});
-      await CryptoBatzContract.connect(addr1).buy(14, {value: presaleMintPrice.mul(14)});
-      await CryptoBatzContract.connect(addr2).buy(20, {value: presaleMintPrice.mul(20)});
+      await CryptoBatzContract.connect(addr1).buyPublic(1, {value: auctionPrice});
+      await CryptoBatzContract.connect(addr1).buyPublic(2, {value: auctionPrice.mul(2)});
+      await CryptoBatzContract.connect(addr2).buyPublic(3, {value: auctionPrice.mul(3)});
 
-      expect(await CryptoBatzContract.totalSupply()).to.equal(35);
-      await expect(CryptoBatzContract.connect(addr1).buy(21, {value: presaleMintPrice.mul(21)})).to.be.revertedWith('Transaction limit exceeded');
-      await expect(CryptoBatzContract.connect(addr2).buy(30, {value: presaleMintPrice.mul(30)})).to.be.revertedWith('Transaction limit exceeded');
+      expect(await CryptoBatzContract.totalSupply()).to.equal(6);
+      await expect(CryptoBatzContract.connect(addr1).buyPublic(4, {value: auctionPrice.mul(4)})).to.be.revertedWith('Transaction limit exceeded');
+      await expect(CryptoBatzContract.connect(addr2).buyPublic(10, {value: auctionPrice.mul(10)})).to.be.revertedWith('Transaction limit exceeded');
     });
 
-    it("Should allow public sale minting up to the max supply limit", async function () {
-      this.timeout(0);
+    it("Should apply dutch auction price rules correctly", async function () {
+      for (let i = 0; i < Math.floor((publicSaleBottomTime - publicSaleStartTime) / publicSaleStepInterval); i++) {
+        let currentPrice = await CryptoBatzContract.getCurrentAuctionPrice();
+        expect(currentPrice).to.equal(auctionStartPrice.sub(auctionStepPrice.mul(i)));
+        console.log(`${i} - ${ethers.utils.formatEther(currentPrice)}`)
 
-      for (let i = 0; i < 77; i++) {
-        await CryptoBatzContract.connect(addr1).buy(20, {value: presaleMintPrice.mul(20)});
-        await CryptoBatzContract.connect(addr2).buy(20, {value: presaleMintPrice.mul(20)});
-        await CryptoBatzContract.connect(addrs[0]).buy(20, {value: presaleMintPrice.mul(20)});
-        await CryptoBatzContract.connect(addrs[1]).buy(20, {value: presaleMintPrice.mul(20)});
-        await CryptoBatzContract.connect(addrs[2]).buy(20, {value: presaleMintPrice.mul(20)});
+        await CryptoBatzContract.connect(addr1).buyPublic(1, {value: currentPrice});
+        await expect(await CryptoBatzContract.connect(addr1).buyPublic(1, {value: currentPrice.add(auctionStepPrice)}))
+          .to.changeEtherBalances(
+            [
+              addr1,
+              CryptoBatzContract
+            ],
+            [
+              ethers.constants.NegativeOne.mul(currentPrice),
+              currentPrice
+            ]);
+        expect(CryptoBatzContract.connect(addr1).buyPublic(1, {value: currentPrice.sub(auctionStepPrice)})).to.be.revertedWith("Insufficient payment")
+
+        await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleStartTime + ((i + 1) * publicSaleStepInterval) - 10]);
+        await network.provider.send("evm_mine")
+        
+        expect(await CryptoBatzContract.getCurrentAuctionPrice()).to.equal(currentPrice);
+
+        await ethers.provider.send('evm_setNextBlockTimestamp', [publicSaleStartTime + ((i + 1) * publicSaleStepInterval)]);
+        await network.provider.send("evm_mine")
       }
 
-      await CryptoBatzContract.connect(addr1).buy(20, {value: presaleMintPrice.mul(20)});
-      await CryptoBatzContract.connect(addr2).buy(20, {value: presaleMintPrice.mul(20)});
-      await CryptoBatzContract.connect(addrs[0]).buy(20, {value: presaleMintPrice.mul(20)});
-      await CryptoBatzContract.connect(addrs[1]).buy(17, {value: presaleMintPrice.mul(17)});
+      expect(await CryptoBatzContract.getCurrentAuctionPrice()).to.equal(auctionBottomPrice);
+      });
 
-      await expect(CryptoBatzContract.connect(addr1).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
-      await expect(CryptoBatzContract.connect(addr2).buy(1, {value: presaleMintPrice})).to.be.revertedWith('Not enought BATZ remaining');
-      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(7777);
+    it.skip("Should allow public sale minting up to the max supply limit", async function () {
+      this.timeout(0);
+
+      for (let i = 0; i < Math.floor(supplyLimit / 15); i++) {
+        await CryptoBatzContract.connect(addr1).buyPublic(3, {value: auctionPrice.mul(3)});
+        await CryptoBatzContract.connect(addr2).buyPublic(3, {value: auctionPrice.mul(3)});
+        await CryptoBatzContract.connect(addrs[0]).buyPublic(3, {value: auctionPrice.mul(3)});
+        await CryptoBatzContract.connect(addrs[1]).buyPublic(3, {value: auctionPrice.mul(3)});
+        await CryptoBatzContract.connect(addrs[2]).buyPublic(3, {value: auctionPrice.mul(3)});
+      }
+
+      for (let i = 0; i < Math.floor((supplyLimit % 15) / 3); i++) {
+        await CryptoBatzContract.connect(addr1).buyPublic(3, {value: auctionPrice.mul(3)});
+      }
+
+      await CryptoBatzContract.connect(addr1).buyPublic((supplyLimit % 3), {value: auctionPrice.mul((supplyLimit % 3))});
+
+      await expect(CryptoBatzContract.connect(addr1).buyPublic(1, {value: auctionPrice})).to.be.revertedWith('Not enought BATZ remaining');
+      await expect(CryptoBatzContract.connect(addr2).buyPublic(1, {value: auctionPrice})).to.be.revertedWith('Not enought BATZ remaining');
+      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(supplyLimit);
     });
 
-    it("Should require 0.04ETH per token for public sale minting", async function () {
-      let sendPrice = presaleMintPrice.sub(1);
+    it("Should fail to allow rolling the start index before provenance hash is set", async function () {
+      await expect(CryptoBatzContract.connect(owner).rollStartIndex()).to.be.revertedWith("Provenance hash not set");
+    });
 
-      await expect(CryptoBatzContract.connect(addr1).buy(1, {value: sendPrice})).to.be.revertedWith("Incorrect payment");
-      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(0);
+    it("Should only allow the owner to roll the start index", async function () {
+      let provenance = ethers.BigNumber.from(1234);
 
-      await CryptoBatzContract.connect(addr2).buy(1, {value: presaleMintPrice});
-      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(1);
+      await CryptoBatzContract.connect(owner).setProvenance(provenance);
 
-      await CryptoBatzContract.connect(addr1).buy(3, {value: presaleMintPrice.mul(3)});
-      expect(await CryptoBatzContract.connect(owner).totalSupply()).to.equal(4);
+      await expect(CryptoBatzContract.connect(addr1).rollStartIndex()).to.be.revertedWith("Ownable: caller is not the owner");
+
+      await CryptoBatzContract.connect(owner).rollStartIndex();
+
+      let startIndex = (await CryptoBatzContract.randomizedStartIndex()).toNumber();
+
+      expect(startIndex).to.be.greaterThanOrEqual(1);
+      expect(startIndex).to.be.lessThanOrEqual(supplyLimit);
+    });
+
+    it("Should fail to allow the start index to be rolled more than once", async function () {
+      let provenance = ethers.BigNumber.from(1234);
+
+      await CryptoBatzContract.connect(owner).setProvenance(provenance);
+
+      await CryptoBatzContract.connect(owner).rollStartIndex();
+      await expect(CryptoBatzContract.connect(owner).rollStartIndex()).to.be.revertedWith("Index already set");
+    });
+
+    it("Should fail to allow the provenance hash to be updated once the start index is rolled", async function () {
+      let provenance = ethers.BigNumber.from(1234);
+
+      await CryptoBatzContract.connect(owner).setProvenance(provenance);
+
+      await CryptoBatzContract.connect(owner).rollStartIndex();
+      
+      provenance = ethers.BigNumber.from(5678);
+
+      await expect(CryptoBatzContract.connect(owner).setProvenance(provenance)).to.be.revertedWith("Starting index already set");
     });
   });
 
@@ -466,10 +550,10 @@ describe("CryptoBatz contract", function () {
     beforeEach(deployContract);
 
     it("Should allow the contract owner to withdraw the entire balance in the contract", async function () {
-      await CryptoBatzContract.connect(addr1).buy(5, {value: auctionBottomPrice.mul(5)});
-      await CryptoBatzContract.connect(addr2).buy(5, {value: auctionBottomPrice.mul(5)});
+      await CryptoBatzContract.connect(addr1).buyPublic(3, {value: auctionBottomPrice.mul(3)});
+      await CryptoBatzContract.connect(addr2).buyPublic(3, {value: auctionBottomPrice.mul(3)});
 
-      let expectedBalance = auctionBottomPrice.mul(10);
+      let expectedBalance = auctionBottomPrice.mul(6);
 
       expect(await ethers.provider.getBalance(CryptoBatzContract.address)).to.equal(expectedBalance)
 
@@ -531,6 +615,36 @@ describe("CryptoBatz contract", function () {
     it("Should fail if anyone other than the owner tries to withdraw", async function () {
       await expect(CryptoBatzContract.connect(addr1).withdraw()).to.be.revertedWith("Ownable: caller is not the owner")
       await expect(CryptoBatzContract.connect(addr2).withdraw()).to.be.revertedWith("Ownable: caller is not the owner")
+    });
+  });
+
+  describe("Query Wallet Content", function () {
+    beforeEach(deployContract);
+
+    it("Should return empty for wallets that does not own any NFTs", async function () {
+      var walletContents = await CryptoBatzContract.connect(owner).tokensOwnedBy(addr1.address);
+
+      expect(walletContents).to.be.an('array').that.is.empty;
+    });
+
+    it("Should return an array of token ids of the tokens owned by a wallet", async function () {
+      await CryptoBatzContract.connect(addr1).buyPublic(3, {value: auctionPrice.mul(3)});
+      await CryptoBatzContract.connect(addr2).buyPublic(2, {value: auctionPrice.mul(2)});
+      await CryptoBatzContract.connect(addr1).buyPublic(1, {value: auctionPrice.mul(1)});
+
+      var wallet1Contents = await CryptoBatzContract.connect(owner).tokensOwnedBy(addr1.address);
+      expect(wallet1Contents).to.be.an('array').that.is.not.empty;
+      expect(wallet1Contents.length).to.equal(4);
+      expect(wallet1Contents[0]).to.equal(1);
+      expect(wallet1Contents[1]).to.equal(2);
+      expect(wallet1Contents[2]).to.equal(3);
+      expect(wallet1Contents[3]).to.equal(6);
+
+      var wallet2Contents = await CryptoBatzContract.connect(owner).tokensOwnedBy(addr2.address);
+      expect(wallet2Contents).to.be.an('array').that.is.not.empty;
+      expect(wallet2Contents.length).to.equal(2);
+      expect(wallet2Contents[0]).to.equal(4);
+      expect(wallet2Contents[1]).to.equal(5);
     });
   });
 });
