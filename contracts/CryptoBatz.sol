@@ -66,12 +66,11 @@ pragma solidity ^0.8.8;
 //...........................................................?@?,...::....................................................
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/finance/PaymentSplitter.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "./SutterTreasury.sol";
 import "./ERC2981.sol";
 
 struct PresaleConfig {
@@ -96,8 +95,7 @@ contract CryptoBatz is
   Ownable,
   ERC721,
   ERC2981,
-  PaymentSplitter,
-  ReentrancyGuard
+  SutterTreasury
 {
   using Address for address;
   using SafeCast for uint256;
@@ -131,25 +129,25 @@ contract CryptoBatz is
   bytes32 private DOMAIN_SEPARATOR;
   bytes32 private TYPEHASH = keccak256("presale(address buyer,uint256 limit)");
 
-  address[] private payeeAddresses = [
+  address[] private mintPayees = [
     0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211, //Ozzy TODO: Insert actual address
     0x09e339CEF02482f4C4127CC49C153303ad801EE0, //Sutter TODO: Insert actual address
-    0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5, //Marketing TODO: Insert actual address
-    0xe05AdCB63a66E6e590961133694A382936C85d9d //Dev TODO: Insert actual address
+    0xE9E9206B598F6Fc95E006684Fe432f100E876110  //Dev TODO: Insert actual address
   ];
 
-  uint256[] private payeeShares = [
-    50, // TODO: Insert actual share
-    35, // TODO: Insert actual share
-    10, // TODO: Insert actual share
-    5 // TODO: Insert actual share
+  uint256[] private mintShares = [
+    50,
+    45,
+    5
   ];
+
+  SutterTreasury public royaltyRecipient;
 
   // CONSTRUCTOR **************************************************
 
   constructor(string memory initialBaseUri)
     ERC721("Crypto Batz by Ozzy Osbourne", "BATZ")
-    PaymentSplitter(payeeAddresses, payeeShares)
+    SutterTreasury(mintPayees, mintShares)
   {
     baseURI = initialBaseUri;
 
@@ -173,7 +171,17 @@ contract CryptoBatz is
       priceStep: 0.0157 ether
     });
 
-    _setRoyalties(address(this), 500); // 5% royalties
+    address[] memory royaltyPayees = new address[](2);
+    royaltyPayees[0] = 0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211; //Ozzy TODO: Insert actual address
+    royaltyPayees[1] = 0x09e339CEF02482f4C4127CC49C153303ad801EE0; //Sutter TODO: Insert actual address
+
+    uint256[] memory royaltyShares = new uint256[](2);
+    royaltyShares[0] = 50;
+    royaltyShares[1] = 50;
+
+    royaltyRecipient = new SutterTreasury(royaltyPayees, royaltyShares);
+
+    _setRoyalties(address(royaltyRecipient), 750); // 7.5% royalties
 
     uint256 chainId;
     assembly {
@@ -383,17 +391,6 @@ contract CryptoBatz is
     _safeMint(to, tokenId);
 
     totalSupply++;
-  }
-
-  /// @notice Allows the owner to withdraw current funds into each payee address, according to the shares set up in the PaymentSplitter constructor
-  /// @dev There's no way to change the shares of payout addresses once the contract is deployed.
-  ///      It is possible for payees to call the release method themselves to withdraw their own share.
-  function withdraw() external onlyOwner nonReentrant {
-    require(address(this).balance > 0, "No balance to withdraw");
-
-    for (uint256 i = 0; i < 4; i++) {
-      release(payable(payee(i)));
-    }
   }
 
   function setBaseURI(string calldata newBaseUri) external onlyOwner {

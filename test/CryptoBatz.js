@@ -1,5 +1,4 @@
-const { expect, assert } = require("chai");
-const { formatEther } = require("ethers/lib/utils");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("CryptoBatz contract", function () {
@@ -107,6 +106,12 @@ describe("CryptoBatz contract", function () {
 
     it("Should set the ancientbatz minter as the contract deployer", async function () {
       expect(await CryptoBatzContract.ancientBatzMinter()).to.equal(owner.address);
+    });
+
+    it("Should deploy an separate SutterTreasure contract as the royalty recipient address", async function () {
+      let royaltyRecipient = await CryptoBatzContract.royaltyRecipient();
+
+      expect(ethers.utils.isAddress(royaltyRecipient)).to.equal(true);
     });
 
     it("Should initially have 0 tokens minted", async function () {
@@ -251,10 +256,11 @@ describe("CryptoBatz contract", function () {
     });
 
     it("Should allow owner to change the royalties", async function () {
+      let royaltyRecipient = await CryptoBatzContract.royaltyRecipient();
       let royaltyInfo = await CryptoBatzContract.royaltyInfo(1, 100);
 
-      expect(royaltyInfo[0]).to.equal(CryptoBatzContract.address);
-      expect(royaltyInfo[1]).to.equal(ethers.BigNumber.from("5"));
+      expect(royaltyInfo[0]).to.equal(royaltyRecipient);
+      expect(royaltyInfo[1]).to.equal(ethers.BigNumber.from("75").div(10));
 
       await CryptoBatzContract.connect(owner).setRoyalties(addr1.address, 1000);
 
@@ -453,8 +459,11 @@ describe("CryptoBatz contract", function () {
     });
 
     it("Should apply dutch auction price rules correctly", async function () {
-      for (let i = 0; i < Math.floor((publicSaleBottomTime - publicSaleStartTime) / publicSaleStepInterval); i++) {
-        let currentPrice = await CryptoBatzContract.getCurrentAuctionPrice();
+      let intervals = Math.floor((publicSaleBottomTime - publicSaleStartTime) / publicSaleStepInterval);
+      let currentPrice;
+
+      for (let i = 0; i < intervals; i++) {
+        currentPrice = await CryptoBatzContract.getCurrentAuctionPrice();
         expect(currentPrice).to.equal(auctionStartPrice.sub(auctionStepPrice.mul(i)));
         console.log(`${i} - ${ethers.utils.formatEther(currentPrice)}`)
 
@@ -480,10 +489,12 @@ describe("CryptoBatz contract", function () {
         await network.provider.send("evm_mine")
       }
 
-      expect(await CryptoBatzContract.getCurrentAuctionPrice()).to.equal(auctionBottomPrice);
-      });
+      currentPrice = await CryptoBatzContract.getCurrentAuctionPrice();
+      expect(currentPrice).to.equal(auctionBottomPrice);
+      console.log(`${intervals} - ${ethers.utils.formatEther(currentPrice)}`)
+    });
 
-    it.skip("Should allow public sale minting up to the max supply limit", async function () {
+    it("Should allow public sale minting up to the max supply limit", async function () {
       this.timeout(0);
 
       for (let i = 0; i < Math.floor(supplyLimit / 15); i++) {
@@ -549,7 +560,7 @@ describe("CryptoBatz contract", function () {
   describe("Withdrawing funds", function () {
     beforeEach(deployContract);
 
-    it("Should allow the contract owner to withdraw the entire balance in the contract", async function () {
+    it("Should allow anyone to withdraw the entire balance in the contract into payee addresses", async function () {
       await CryptoBatzContract.connect(addr1).buyPublic(3, {value: auctionBottomPrice.mul(3)});
       await CryptoBatzContract.connect(addr2).buyPublic(3, {value: auctionBottomPrice.mul(3)});
 
@@ -557,7 +568,7 @@ describe("CryptoBatz contract", function () {
 
       expect(await ethers.provider.getBalance(CryptoBatzContract.address)).to.equal(expectedBalance)
 
-      await expect(await CryptoBatzContract.connect(owner).withdraw())
+      await expect(await CryptoBatzContract.connect(addrs[4]).withdrawAll())
         .to.changeEtherBalances(
           [
             owner,
@@ -569,9 +580,8 @@ describe("CryptoBatz contract", function () {
           ]);
 
       expect(await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211")).to.equal(expectedBalance.mul(50).div(100));
-      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(35).div(100));
-      expect(await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5")).to.equal(expectedBalance.mul(10).div(100));
-      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(5).div(100));
+      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(45).div(100));
+      expect(await ethers.provider.getBalance("0xE9E9206B598F6Fc95E006684Fe432f100E876110")).to.equal(expectedBalance.mul(5).div(100));
     });
 
     it("Should allow direct transfers into the contract and withdrawal", async function () {
@@ -588,10 +598,9 @@ describe("CryptoBatz contract", function () {
 
       let bal1 = await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211");
       let bal2 = await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0");
-      let bal3 = await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5");
-      let bal4 = await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d");
+      let bal3 = await ethers.provider.getBalance("0xE9E9206B598F6Fc95E006684Fe432f100E876110");
 
-      await expect(await CryptoBatzContract.connect(owner).withdraw())
+      await expect(await CryptoBatzContract.connect(addr2).withdrawAll())
         .to.changeEtherBalances(
           [
             owner,
@@ -603,18 +612,12 @@ describe("CryptoBatz contract", function () {
           ]);
 
       expect(await ethers.provider.getBalance("0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211")).to.equal(expectedBalance.mul(50).div(100).add(bal1));
-      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(35).div(100).add(bal2));
-      expect(await ethers.provider.getBalance("0x8bffc7415B1F8ceA3BF9e1f36EBb2FF15d175CF5")).to.equal(expectedBalance.mul(10).div(100).add(bal3));
-      expect(await ethers.provider.getBalance("0xe05AdCB63a66E6e590961133694A382936C85d9d")).to.equal(expectedBalance.mul(5).div(100).add(bal4));
+      expect(await ethers.provider.getBalance("0x09e339CEF02482f4C4127CC49C153303ad801EE0")).to.equal(expectedBalance.mul(45).div(100).add(bal2));
+      expect(await ethers.provider.getBalance("0xE9E9206B598F6Fc95E006684Fe432f100E876110")).to.equal(expectedBalance.mul(5).div(100).add(bal3));
     });
 
     it("Should fail if there is 0 balance in the contract", async function () {
-      await expect(CryptoBatzContract.connect(owner).withdraw()).to.be.revertedWith("No balance to withdraw")
-    });
-
-    it("Should fail if anyone other than the owner tries to withdraw", async function () {
-      await expect(CryptoBatzContract.connect(addr1).withdraw()).to.be.revertedWith("Ownable: caller is not the owner")
-      await expect(CryptoBatzContract.connect(addr2).withdraw()).to.be.revertedWith("Ownable: caller is not the owner")
+      await expect(CryptoBatzContract.connect(owner).withdrawAll()).to.be.revertedWith("No balance to withdraw")
     });
   });
 
