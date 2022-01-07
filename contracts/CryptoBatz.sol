@@ -176,8 +176,8 @@ contract CryptoBatz is
     royaltyPayees[1] = 0x09e339CEF02482f4C4127CC49C153303ad801EE0; //Sutter TODO: Insert actual address
 
     uint256[] memory royaltyShares = new uint256[](2);
-    royaltyShares[0] = 50;
-    royaltyShares[1] = 50;
+    royaltyShares[0] = 70;
+    royaltyShares[1] = 30;
 
     royaltyRecipient = new SutterTreasury(royaltyPayees, royaltyShares);
 

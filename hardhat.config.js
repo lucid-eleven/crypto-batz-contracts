@@ -20,10 +20,6 @@ module.exports = {
     rinkeby: {
       url: process.env.RINKEBY_API_URI,
       accounts: [process.env.RINKEBY_ACCOUNT_PRIVATE_KEY]
-    },
-    mainnet: {
-      url: process.env.MAINNET_API_URI,
-      accounts: [process.env.MAINNET_ACCOUNT_PRIVATE_KEY]
     }
   },
   etherscan: {

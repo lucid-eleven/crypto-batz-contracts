@@ -465,7 +465,6 @@ describe("CryptoBatz contract", function () {
       for (let i = 0; i < intervals; i++) {
         currentPrice = await CryptoBatzContract.getCurrentAuctionPrice();
         expect(currentPrice).to.equal(auctionStartPrice.sub(auctionStepPrice.mul(i)));
-        console.log(`${i} - ${ethers.utils.formatEther(currentPrice)}`)
 
         await CryptoBatzContract.connect(addr1).buyPublic(1, {value: currentPrice});
         await expect(await CryptoBatzContract.connect(addr1).buyPublic(1, {value: currentPrice.add(auctionStepPrice)}))

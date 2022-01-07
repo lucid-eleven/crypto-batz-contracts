@@ -1,8 +1,6 @@
 const { network } = require("hardhat");
 
-// yours, or create new ones.
 async function main() {
-    // This is just a convenience check
     if (network.name === "hardhat") {
       console.warn(
         "You are trying to deploy a contract to the Hardhat Network, which" +
@@ -11,7 +9,6 @@ async function main() {
       );
     }
   
-    // ethers is available in the global scope
     const [deployer] = await ethers.getSigners();
     console.log(
       "Deploying the contracts with the account:",
@@ -21,16 +18,15 @@ async function main() {
     console.log("Account balance:", (await deployer.getBalance()).toString());
   
     const CryptoBatzContract = await (await (await ethers.getContractFactory("CryptoBatz")).deploy(
-      "ipfs://hash/",
+      "ipfs://hash/",   //TODO: update IPFS hash
     )).deployed();
 
     console.log("CryptoBatz contract address:", CryptoBatzContract.address);
     
-    // We also save the contract's artifacts and address in the frontend directory
-    saveFrontendFiles(CryptoBatzContract);
+    saveDeploymentFiles(CryptoBatzContract);
   }
   
-  function saveFrontendFiles(CryptoBatzContract) {
+  function saveDeploymentFiles(CryptoBatzContract) {
     const fs = require("fs");
     const outputDir = __dirname + "/../deploy";
   
