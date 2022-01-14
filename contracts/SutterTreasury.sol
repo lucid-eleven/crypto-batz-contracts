@@ -6,10 +6,7 @@ import "@openzeppelin/contracts/finance/PaymentSplitter.sol";
 contract SutterTreasury is PaymentSplitter {
   uint256 private _numberOfPayees;
 
-  constructor(address[] memory payees, uint256[] memory shares_)
-    payable
-    PaymentSplitter(payees, shares_)
-  {
+  constructor(address[] memory payees, uint256[] memory shares_) payable PaymentSplitter(payees, shares_) {
     _numberOfPayees = payees.length;
   }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: None
-pragma solidity ^0.8.8;
+pragma solidity 0.8.8;
 
 //.......................................;+++*%%%%%%%%%%?++++,............................................................
 //..................................:????%%?**:,:,,,,,:,;**?S%+...........................................................
@@ -82,7 +82,6 @@ struct PresaleConfig {
 
 struct DutchAuctionConfig {
   uint32 txLimit;
-  uint32 supplyLimit;
   uint32 startTime;
   uint32 bottomTime;
   uint32 stepInterval;
@@ -91,20 +90,26 @@ struct DutchAuctionConfig {
   uint256 priceStep;
 }
 
-contract CryptoBatz is
-  Ownable,
-  ERC721,
-  ERC2981,
-  SutterTreasury
-{
+contract CryptoBatz is Ownable, ERC721, ERC2981, SutterTreasury {
   using Address for address;
   using SafeCast for uint256;
   using ECDSA for bytes32;
 
+  // EVENTS *****************************************************
+  event StartingIndexSet(uint256 _value);
+  event ProvenanceHashUpdated(uint256 _hash);
+  event WhitelistSignerUpdated(address _signer);
+  event BaseUriUpdated(string _uri);
+  event AncientBatzMinterUpdated(address _address);
+  event AncientBatzMinted(address indexed _to, uint256 indexed _id);
+  event PresaleConfigUpdated();
+  event DutchAuctionConfigUpdated();
+
   // MEMBERS ****************************************************
 
-  uint32 public constant MAX_OWNER_RESERVE = 101;
-  uint32 public constant ANCIENT_BATZ_SUPPLY = 99;
+  uint256 public constant MAX_OWNER_RESERVE = 101;
+  uint256 public constant ANCIENT_BATZ_SUPPLY = 99;
+  uint256 public constant CRYPTO_BATZ_SUPPLY = 9666;
 
   uint256 public totalSupply = 0;
 
@@ -127,19 +132,15 @@ contract CryptoBatz is
   mapping(address => uint256) private presaleMinted;
 
   bytes32 private DOMAIN_SEPARATOR;
-  bytes32 private TYPEHASH = keccak256("presale(address buyer,uint256 limit)");
+  bytes32 private constant TYPEHASH = keccak256("presale(address buyer,uint256 limit)");
 
   address[] private mintPayees = [
-    0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211, //Ozzy TODO: Insert actual address
-    0x09e339CEF02482f4C4127CC49C153303ad801EE0, //Sutter TODO: Insert actual address
-    0xE9E9206B598F6Fc95E006684Fe432f100E876110  //Dev TODO: Insert actual address
+    0xaDC6A7985036531c394B6dF054666C51dE29b9a9, //Ozzy
+    0x76bf7b1e22C773754EBC608d92f71cc0B5D99d4B, //Sutter
+    0x8b8AbE9CEC13CF5050517816B2E95722E711818e //Dev
   ];
 
-  uint256[] private mintShares = [
-    50,
-    45,
-    5
-  ];
+  uint256[] private mintShares = [50, 45, 5];
 
   SutterTreasury public royaltyRecipient;
 
@@ -156,24 +157,23 @@ contract CryptoBatz is
     presaleConfig = PresaleConfig({
       startTime: 1642633200, // Wed Jan 19 2022 23:00:00 GMT+0000
       endTime: 1642719600, //	Thu Jan 20 2022 23:00:00 GMT+0000
-      supplyLimit: 7166,
+      supplyLimit: 8000,
       mintPrice: 0.088 ether
     });
 
     dutchAuctionConfig = DutchAuctionConfig({
       txLimit: 3,
-      supplyLimit: 9666,
-      startTime: 1642719600, // Thu Jan 20 2022 23:00:00 GMT+0000
-      bottomTime: 1642730400, // Fri Jan 21 2022 02:00:00 GMT+0000
+      startTime: 1642721400, // Thu Jan 20 2022 23:30:00 GMT+0000
+      bottomTime: 1642735800, // Fri Jan 21 2022 03:30:00 GMT+0000
       stepInterval: 300, // 5 minutes
-      startPrice: 0.666 ether,
+      startPrice: 1.666 ether,
       bottomPrice: 0.1 ether,
-      priceStep: 0.0157 ether
+      priceStep: 0.0326 ether
     });
 
     address[] memory royaltyPayees = new address[](2);
-    royaltyPayees[0] = 0xFa65B0e06BB42839aB0c37A26De4eE0c03B30211; //Ozzy TODO: Insert actual address
-    royaltyPayees[1] = 0x09e339CEF02482f4C4127CC49C153303ad801EE0; //Sutter TODO: Insert actual address
+    royaltyPayees[0] = 0xaDC6A7985036531c394B6dF054666C51dE29b9a9; //Ozzy
+    royaltyPayees[1] = 0x76bf7b1e22C773754EBC608d92f71cc0B5D99d4B; //Sutter
 
     uint256[] memory royaltyShares = new uint256[](2);
     royaltyShares[0] = 70;
@@ -190,9 +190,7 @@ contract CryptoBatz is
 
     DOMAIN_SEPARATOR = keccak256(
       abi.encode(
-        keccak256(
-          "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-        ),
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
         keccak256(bytes("CryptoBatz")),
         keccak256(bytes("1")),
         chainId,
@@ -216,36 +214,17 @@ contract CryptoBatz is
   ) external payable {
     PresaleConfig memory _config = presaleConfig;
 
-    require(
-      block.timestamp >= _config.startTime && block.timestamp < _config.endTime,
-      "Presale is not active"
-    );
+    require(block.timestamp >= _config.startTime && block.timestamp < _config.endTime, "Presale is not active");
     require(whitelistSigner != address(0), "Whitelist signer has not been set");
-    require(
-      msg.value == (_config.mintPrice * numberOfTokens),
-      "Incorrect payment"
-    );
-    require(
-      (presaleMinted[msg.sender] + numberOfTokens) <= approvedLimit,
-      "Mint limit exceeded"
-    );
-    require(
-      (totalSupply + numberOfTokens) <= _config.supplyLimit,
-      "Not enought BATZ remaining"
-    );
+    require(msg.value == (_config.mintPrice * numberOfTokens), "Incorrect payment");
+    require((presaleMinted[msg.sender] + numberOfTokens) <= approvedLimit, "Mint limit exceeded");
+    require((totalSupply + numberOfTokens) <= _config.supplyLimit, "Not enough BATZ remaining");
 
     bytes32 digest = keccak256(
-      abi.encodePacked(
-        "\x19\x01",
-        DOMAIN_SEPARATOR,
-        keccak256(abi.encode(TYPEHASH, msg.sender, approvedLimit))
-      )
+      abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, keccak256(abi.encode(TYPEHASH, msg.sender, approvedLimit)))
     );
     address signer = digest.recover(signature);
-    require(
-      signer != address(0) && signer == whitelistSigner,
-      "Invalid signature"
-    );
+    require(signer != address(0) && signer == whitelistSigner, "Invalid signature");
 
     presaleMinted[msg.sender] = presaleMinted[msg.sender] + numberOfTokens;
 
@@ -257,17 +236,11 @@ contract CryptoBatz is
   /// @param numberOfTokens the number of NFTs to buy
   function buyPublic(uint256 numberOfTokens) external payable {
     // disallow contracts from buying
-    require(
-      (!msg.sender.isContract() && msg.sender == tx.origin),
-      "Contract buys not allowed"
-    );
+    require((!msg.sender.isContract() && msg.sender == tx.origin), "Contract buys not allowed");
 
     DutchAuctionConfig memory _config = dutchAuctionConfig;
 
-    require(
-      (totalSupply + numberOfTokens) <= _config.supplyLimit,
-      "Not enought BATZ remaining"
-    );
+    require((totalSupply + numberOfTokens) <= CRYPTO_BATZ_SUPPLY, "Not enough BATZ remaining");
     require(block.timestamp >= _config.startTime, "Sale is not active");
     require(numberOfTokens <= _config.txLimit, "Transaction limit exceeded");
 
@@ -295,11 +268,8 @@ contract CryptoBatz is
     } else if (timestamp >= _config.bottomTime) {
       currentPrice = _config.bottomPrice;
     } else {
-      uint256 elapsedIntervals = (timestamp - _config.startTime) /
-        _config.stepInterval;
-      currentPrice =
-        _config.startPrice -
-        (elapsedIntervals * _config.priceStep);
+      uint256 elapsedIntervals = (timestamp - _config.startTime) / _config.stepInterval;
+      currentPrice = _config.startPrice - (elapsedIntervals * _config.priceStep);
     }
 
     return currentPrice;
@@ -308,11 +278,7 @@ contract CryptoBatz is
   /// @notice Gets an array of tokenIds owned by a wallet
   /// @param wallet wallet address to query contents for
   /// @return an array of tokenIds owned by wallet
-  function tokensOwnedBy(address wallet)
-    external
-    view
-    returns (uint256[] memory)
-  {
+  function tokensOwnedBy(address wallet) external view returns (uint256[] memory) {
     uint256 tokenCount = balanceOf(wallet);
 
     uint256[] memory ownedTokenIds = new uint256[](tokenCount);
@@ -324,12 +290,7 @@ contract CryptoBatz is
   }
 
   /// @inheritdoc	ERC165
-  function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    override(ERC721, ERC2981)
-    returns (bool)
-  {
+  function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC2981) returns (bool) {
     return super.supportsInterface(interfaceId);
   }
 
@@ -340,10 +301,7 @@ contract CryptoBatz is
   /// @param to address for the reserved NFTs to be minted to
   /// @param numberOfTokens number of NFTs to reserve
   function reserve(address to, uint256 numberOfTokens) external onlyOwner {
-    require(
-      (totalSupply + numberOfTokens) <= MAX_OWNER_RESERVE,
-      "Exceeds owner reserve limit"
-    );
+    require((totalSupply + numberOfTokens) <= MAX_OWNER_RESERVE, "Exceeds owner reserve limit");
 
     mint(to, numberOfTokens);
   }
@@ -354,22 +312,15 @@ contract CryptoBatz is
   function rollStartIndex() external onlyOwner {
     require(PROVENANCE_HASH != 0, "Provenance hash not set");
     require(randomizedStartIndex == 0, "Index already set");
-    require(
-      block.timestamp >= dutchAuctionConfig.startTime,
-      "Too early to roll start index"
-    );
+    require(block.timestamp >= dutchAuctionConfig.startTime, "Too early to roll start index");
 
     uint256 number = uint256(
-      keccak256(
-        abi.encodePacked(
-          blockhash(block.number - 1),
-          block.coinbase,
-          block.difficulty
-        )
-      )
+      keccak256(abi.encodePacked(blockhash(block.number - 1), block.coinbase, block.difficulty, block.timestamp))
     );
 
-    randomizedStartIndex = (number % dutchAuctionConfig.supplyLimit) + 1;
+    randomizedStartIndex = (number % CRYPTO_BATZ_SUPPLY) + 1;
+
+    emit StartingIndexSet(randomizedStartIndex);
   }
 
   /// @notice Allows the ancientBatzMinter to mint an AncientBatz to the specified address
@@ -377,71 +328,55 @@ contract CryptoBatz is
   /// @param ancientBatzId the AncientBatz id, from 1 to ANCIENT_BATZ_SUPPLY inclusive
   function mintAncientBatz(address to, uint256 ancientBatzId) external {
     require(ancientBatzMinter != address(0), "AncientBatz minter not set");
-    require(
-      msg.sender == ancientBatzMinter,
-      "Must be authorized AncientBatz minter"
-    );
-    require(
-      ancientBatzId > 0 && ancientBatzId <= ANCIENT_BATZ_SUPPLY,
-      "Invalid AncientBatz Id"
-    );
+    require(msg.sender == ancientBatzMinter, "Must be authorized AncientBatz minter");
+    require(ancientBatzId > 0 && ancientBatzId <= ANCIENT_BATZ_SUPPLY, "Invalid AncientBatz Id");
 
-    uint256 tokenId = dutchAuctionConfig.supplyLimit + ancientBatzId;
+    uint256 tokenId = CRYPTO_BATZ_SUPPLY + ancientBatzId;
 
+    emit AncientBatzMinted(to, ancientBatzId);
     _safeMint(to, tokenId);
 
     totalSupply++;
   }
 
   function setBaseURI(string calldata newBaseUri) external onlyOwner {
+    emit BaseUriUpdated(newBaseUri);
     baseURI = newBaseUri;
   }
 
-  function setRoyalties(address recipient, uint256 value) external onlyOwner {
-    require(recipient != address(0), "zero address");
-    _setRoyalties(recipient, value);
-  }
-
   function setWhitelistSigner(address newWhitelistSigner) external onlyOwner {
+    emit WhitelistSignerUpdated(newWhitelistSigner);
     whitelistSigner = newWhitelistSigner;
   }
 
   function setAncientBatzMinter(address newMinter) external onlyOwner {
+    emit AncientBatzMinterUpdated(newMinter);
     ancientBatzMinter = newMinter;
   }
 
   function setProvenance(uint256 provenanceHash) external onlyOwner {
     require(randomizedStartIndex == 0, "Starting index already set");
 
+    emit ProvenanceHashUpdated(provenanceHash);
     PROVENANCE_HASH = provenanceHash;
   }
 
-  /// @notice Allows the contract owner to update config for the presale
-  function configurePresale(
-    uint256 startTime,
-    uint256 endTime,
-    uint256 supplyLimit,
-    uint256 mintPrice
-  ) external onlyOwner {
+  /// @notice Allows the contract owner to update start and end time for the presale
+  function configurePresale(uint256 startTime, uint256 endTime) external onlyOwner {
     uint32 _startTime = startTime.toUint32();
     uint32 _endTime = endTime.toUint32();
-    uint32 _supplyLimit = supplyLimit.toUint32();
 
     require(0 < _startTime, "Invalid time");
     require(_startTime < _endTime, "Invalid time");
 
-    presaleConfig = PresaleConfig({
-      startTime: _startTime,
-      endTime: _endTime,
-      supplyLimit: _supplyLimit,
-      mintPrice: mintPrice
-    });
+    presaleConfig.startTime = _startTime;
+    presaleConfig.endTime = _endTime;
+
+    emit PresaleConfigUpdated();
   }
 
   /// @notice Allows the contract owner to update config for the public dutch auction
   function configureDutchAuction(
-    uint256 txLimit,
-    uint256 supplyLimit,
     uint256 startTime,
     uint256 bottomTime,
     uint256 stepInterval,
@@ -449,25 +384,25 @@ contract CryptoBatz is
     uint256 bottomPrice,
     uint256 priceStep
   ) external onlyOwner {
-    uint32 _txLimit = txLimit.toUint32();
-    uint32 _supplyLimit = supplyLimit.toUint32();
     uint32 _startTime = startTime.toUint32();
     uint32 _bottomTime = bottomTime.toUint32();
     uint32 _stepInterval = stepInterval.toUint32();
 
-    require(0 < _startTime, "Invalid time");
+    require(presaleConfig.endTime <= _startTime, "Invalid time");
     require(_startTime < _bottomTime, "Invalid time");
+    require(0 < stepInterval, "0 step interval");
+    require(bottomPrice < startPrice, "Invalid start price");
+    require(0 < bottomPrice, "Invalid bottom price");
+    require(0 < priceStep && priceStep < startPrice, "Invalid price step");
 
-    dutchAuctionConfig = DutchAuctionConfig({
-      txLimit: _txLimit,
-      supplyLimit: _supplyLimit,
-      startTime: _startTime,
-      bottomTime: _bottomTime,
-      stepInterval: _stepInterval,
-      startPrice: startPrice,
-      bottomPrice: bottomPrice,
-      priceStep: priceStep
-    });
+    dutchAuctionConfig.startTime = _startTime;
+    dutchAuctionConfig.bottomTime = _bottomTime;
+    dutchAuctionConfig.stepInterval = _stepInterval;
+    dutchAuctionConfig.startPrice = startPrice;
+    dutchAuctionConfig.bottomPrice = bottomPrice;
+    dutchAuctionConfig.priceStep = priceStep;
+
+    emit DutchAuctionConfigUpdated();
   }
 
   // PRIVATE/INTERNAL METHODS ****************************************************
@@ -511,9 +446,7 @@ contract CryptoBatz is
    * @param from address representing the previous owner of the given token ID
    * @param tokenId uint256 ID of the token to be removed from the tokens list of the given address
    */
-  function _removeTokenFromOwnerEnumeration(address from, uint256 tokenId)
-    private
-  {
+  function _removeTokenFromOwnerEnumeration(address from, uint256 tokenId) private {
     // To prevent a gap in from's tokens array, we store the last token in the index of the token to delete, and
     // then delete the last slot (swap and pop).
 

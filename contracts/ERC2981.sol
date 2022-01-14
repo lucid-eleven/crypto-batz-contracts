@@ -34,15 +34,7 @@ contract ERC2981 is ERC165, IERC2981 {
   }
 
   /// @inheritdoc	ERC165
-  function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    virtual
-    override
-    returns (bool)
-  {
-    return
-      interfaceId == type(IERC2981).interfaceId ||
-      super.supportsInterface(interfaceId);
+  function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+    return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
   }
 }
