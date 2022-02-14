@@ -15,7 +15,12 @@ module.exports = {
   },
   networks: {
     hardhat: {
-      chainId: 1337
+      chainId: 1337,
+      gas: 'auto',
+      forking: {
+        url: MAINNET_API_URI,
+        blockNumber: 14194620
+      }
     },
     rinkeby: {
       url: process.env.RINKEBY_API_URI,
