@@ -474,6 +474,50 @@ describe.only("MutantBatz contract", function () {
 
   });
 
+  describe("Querying bite status", function() {
+    beforeEach(deployContract);
+    beforeEach(setupSignatures);
+
+    it("Should return the bite status of a list of bats and victims", async function () {
+      let batIds = [];
+      let victimIds = {};
+
+      for (let i = 0; i < 20; i++) {
+        let data = testData.splice(Math.floor(Math.random() * testData.length), 1)[0];
+        batIds.push(data.batId);
+        if (!(data.victimContract in victimIds)) victimIds[data.victimContract] = [];
+        victimIds[data.victimContract].push(data.victimId);
+
+        await executeBite(data);
+      }
+
+      let batCanBite = await MutantBatzContract.canBatsBite(batIds);
+      batCanBite.forEach(bitten => expect(bitten).to.be.false);
+
+      let input = [...(batIds.splice(0,3)), 1, 2, 3, ...(batIds.splice(0,2))];
+      batCanBite = await MutantBatzContract.canBatsBite(input);
+      expect(batCanBite[0]).to.be.false;
+      expect(batCanBite[1]).to.be.false;
+      expect(batCanBite[2]).to.be.false;
+      expect(batCanBite[3]).to.be.true;
+      expect(batCanBite[4]).to.be.true;
+      expect(batCanBite[5]).to.be.true;
+      expect(batCanBite[6]).to.be.false;
+      expect(batCanBite[7]).to.be.false;
+
+      let victims = Object.keys(victimIds);
+      input = [4, 5, 6, ...(victimIds[victims[0]]), 1, 2, 3];
+      victimsCanBeBitten = await MutantBatzContract.canVictimBeBitten(victims[0], input);
+      victimsCanBeBitten.forEach((v, i) => {
+        if (i > 2 && i <= 2 + victimIds[victims[0]].length) {
+          expect(v).to.be.false
+        } else {
+          expect(v).to.be.true
+        }
+      })
+    });
+  })
+
   describe("Withdrawing funds", function () {
     beforeEach(deployContract);
 

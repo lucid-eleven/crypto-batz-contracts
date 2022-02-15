@@ -159,6 +159,51 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
     return tokenId <= _metadataLockedTo;
   }
 
+  /// @notice Check if the list of CryptoBatz can bite to create MutantBatz
+  /// @dev This works for both CryptoBat and AncientBat tokenIds
+  /// @param tokenIds an array of tokenIds to check
+  /// @return an array of bool, true = bat can still bite
+  function canBatsBite(uint256[] calldata tokenIds)
+    external
+    view
+    returns (bool[] memory)
+  {
+    require(tokenIds.length > 0, "Empty array");
+
+    bool[] memory canBite = new bool[](tokenIds.length);
+
+    for(uint i = 0; i < tokenIds.length; i++) {
+      if (tokenIds[i] >= ANCIENT_BATZ_START_ID) {
+        canBite[i] = (_ancientBatBites[tokenIds[i]] < ANCIENT_BATZ_BITE_LIMIT);
+      } else {
+        canBite[i] = !_cryptoBatHasBitten[tokenIds[i]];
+      }
+    }
+
+    return canBite;
+  }
+
+  /// @notice Check if the list of victim NFTs can be still bitten
+  /// @param victimContract contract address of the victim NFT
+  /// @param tokenIds an array of tokenIds to check
+  /// @return an array of bool, true = victim can still be bitten
+  function canVictimBeBitten(address victimContract, uint256[] calldata tokenIds)
+    external
+    view
+    returns (bool[] memory)
+  {
+    require(tokenIds.length > 0, "Empty array");
+    require(_isValidVictim[victimContract], "This NFT collection cannot be bitten");
+
+    bool[] memory canBeBitten = new bool[](tokenIds.length);
+
+    for(uint i = 0; i < tokenIds.length; i++) {
+      canBeBitten[i] = !_victimWasBitten[victimContract][tokenIds[i]];
+    }
+
+    return canBeBitten;
+  }
+
   /// @inheritdoc	ERC165
   function supportsInterface(bytes4 interfaceId)
     public
