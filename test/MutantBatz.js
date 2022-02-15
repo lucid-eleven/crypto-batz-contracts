@@ -353,6 +353,7 @@ describe.only("MutantBatz contract", function () {
       let data = account[0];
 
       await expect(executeBite(data)).to.emit(MutantBatzContract, 'MutantBatCreated').withArgs(1, data.batId, data.victimContract, data.victimId);
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(data.tokenURI);
     });
 
     it("Should emit a MutantBatIncubating event when a tokenURI is not supplied", async function () {
@@ -361,6 +362,114 @@ describe.only("MutantBatz contract", function () {
       data.tokenURI = ""
 
       await expect(executeBite(data)).to.emit(MutantBatzContract, 'MutantBatIncubating').withArgs(1, data.batId, data.victimContract, data.victimId);
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(defaultTokenUri);
+    });
+
+    it("Should allow contract owner to update tokenURI if it's not locked", async function () {
+      let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+      let data = account[0];
+      data.tokenURI = ""
+
+      await executeBite(data);
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(defaultTokenUri);
+
+      await MutantBatzContract.connect(owner).updateTokenURI(1, "newuri");
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal("newuri");
+    });
+
+    it("Should not allow updating tokenURI for non-existent tokens", async function () {
+      await expect(MutantBatzContract.connect(owner).updateTokenURI(1, "newuri")).to.be.revertedWith("URI query for nonexistent token");
+    });
+
+    it("Should not allow setting empty tokenURI", async function () {
+      let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+      let data = account[0];
+      data.tokenURI = ""
+
+      await executeBite(data);
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(defaultTokenUri);
+
+      await expect(MutantBatzContract.connect(owner).updateTokenURI(1, "")).to.be.revertedWith("TokenURI cannot be empty")
+    });
+
+    it("Should not allow anyone else to update tokenURI", async function () {
+      let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+      let data = account[0];
+      data.tokenURI = ""
+
+      await executeBite(data);
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(defaultTokenUri);
+
+      await expect(MutantBatzContract.connect(addr2).updateTokenURI(1, "newuri")).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("Should not allow anyone to update tokenURI once locked", async function () {
+      let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+      let data = account[0];
+      data.tokenURI = ""
+
+      await executeBite(data);
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal(defaultTokenUri);
+
+      await MutantBatzContract.connect(owner).updateTokenURI(1, "newuri");
+
+      await expect(await MutantBatzContract.tokenURI(1)).to.equal("newuri");
+
+      await MutantBatzContract.connect(owner).lockTokenMetadataTo(1);
+
+      await expect(MutantBatzContract.connect(owner).updateTokenURI(1, "newuri2")).to.be.revertedWith("Token metadata URI has been locked");
+      await expect(MutantBatzContract.connect(addr2).updateTokenURI(1, "newuri2")).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("Should allow contract owner to lock tokenURI up to a limit", async function () {
+      for (let i = 0; i < 10; i++) {
+        let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+        let data = account[0];
+  
+        await executeBite(data);
+      }
+      
+      await MutantBatzContract.connect(owner).lockTokenMetadataTo(6);
+      await expect(MutantBatzContract.connect(owner).updateTokenURI(6, "newuri")).to.be.revertedWith("Token metadata URI has been locked");
+      await MutantBatzContract.connect(owner).updateTokenURI(7, "newuri");
+    });
+
+    it("Should not allow anyone else to lock tokenURI", async function () {
+      let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+      let data = account[0];
+
+      await executeBite(data);
+
+      await expect(MutantBatzContract.connect(addr2).updateTokenURI(1, "newuri")).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("Should not allow reducing the tokenURI lock", async function () {
+      for (let i = 0; i < 10; i++) {
+        let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+        let data = account[0];
+  
+        await executeBite(data);
+      }
+      
+      await MutantBatzContract.connect(owner).lockTokenMetadataTo(6);
+      await expect(MutantBatzContract.connect(owner).lockTokenMetadataTo(5)).to.be.revertedWith("Must increase beyond current lock");
+      await expect(MutantBatzContract.connect(owner).updateTokenURI(6, "newuri")).to.be.revertedWith("Token metadata URI has been locked");
+    });
+
+    it("Should not allow locking the tokenURI above total supply limit", async function () {
+      for (let i = 0; i < 10; i++) {
+        let account = testDataBuyerArray.splice(Math.floor(Math.random() * testDataBuyerArray.length), 1)[0]
+        let data = account[0];
+  
+        await executeBite(data);
+      }
+      
+      await expect(MutantBatzContract.connect(owner).lockTokenMetadataTo(11)).to.be.revertedWith("Locking beyond current supply");
     });
 
   });

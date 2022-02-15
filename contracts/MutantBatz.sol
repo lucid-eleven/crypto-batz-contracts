@@ -13,6 +13,7 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
   // EVENTS *****************************************************
 
   event MintSignerUpdated(address signer);
+  event TokenUriUpdated(uint256 indexed tokenId, string newTokenUri);
   event MutantBatCreated(uint256 indexed tokenId, uint256 cryptoBatId, address victimContract, uint256 victimId);
   event MutantBatIncubating(uint256 indexed tokenId, uint256 cryptoBatId, address victimContract, uint256 victimId);
 
@@ -40,9 +41,14 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
   // TokenURI for each individual mutant bat metadata
   mapping(uint256 => string) private _mutantBatTokenURI;
 
+  // Controls the range of tokenIds for which metadata has been permanently locked
   uint256 private _metadataLockedTo;
 
+  // If an individual tokenURI was not set during mint, this default tokenURI is used
   string public defaultTokenURI;
+
+  // Bite transactions must come from authorized source, this is because we are dynamically generating
+  // each mutantbat and creating a tokenURI in real time as the Bite transaction is being prepared
   address public mintSigner;
 
   bytes32 private DOMAIN_SEPARATOR;
@@ -91,7 +97,7 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
 
   // PUBLIC METHODS ****************************************************
 
-  /// @notice 
+  /// @notice create a new MutantBat from a CryptoBat and a victim NFT
   /// @param batId tokenId of the CryptoBat used for biting
   /// @param victimContract contract address of the victim NFT collection
   /// @param victimId tokenId of the victim NFT that will be bitten
@@ -179,12 +185,16 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
 
   // OWNER METHODS ********************************************************
 
+  /// @notice Allows the contract owner to update the defaultTokenURI
+  /// @param newTokenURI the new value for defaultTokenURI
   function setDefaultTokenURI(string calldata newTokenURI) external onlyOwner {
     require(bytes(newTokenURI).length > 0, "TokenURI cannot be empty");
 
     defaultTokenURI = newTokenURI;
   }
 
+  /// @notice Allows the contract owner to enable a victim NFT collection for biting
+  /// @param contractAddress the contract address of the victim NFT collection
   function enableVictim(address contractAddress) external onlyOwner {
     require(contractAddress != address(0), "0 address not accepted");
     require(_isValidVictim[contractAddress] == false, "Victim already enabled");
@@ -192,20 +202,28 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
     _isValidVictim[contractAddress] = true;
   }
 
+  /// @notice Allows the contract owner to disable a victim NFT collection for biting
+  /// @param contractAddress The contract address of the victim NFT collection
   function disableVictim(address contractAddress) external onlyOwner {
     require(_isValidVictim[contractAddress] == true, "Victim not enabled");
 
     delete _isValidVictim[contractAddress];
   }
 
+  /// @notice Allows the contract owner to update the metadata URI for a MutantBat, if it's not locked
+  /// @param tokenId MutantBat to update
+  /// @param newTokenURI New metadata URI
   function updateTokenURI(uint256 tokenId, string calldata newTokenURI) external onlyOwner {
     require(_exists(tokenId), "URI query for nonexistent token");
     require(!isTokenMetadataLocked(tokenId), "Token metadata URI has been locked");
     require(bytes(newTokenURI).length > 0, "TokenURI cannot be empty");
 
+    emit TokenUriUpdated(tokenId, newTokenURI);
     _mutantBatTokenURI[tokenId] = newTokenURI;
   }
 
+  /// @notice Allows the contract owner lock all metadata URIs up to a certain tokenId
+  /// @param tokenId All metadata will be locked from token #1 up to this tokenId
   function lockTokenMetadataTo(uint256 tokenId) external onlyOwner {
     require(tokenId <= totalSupply, "Locking beyond current supply");
     require(tokenId > _metadataLockedTo, "Must increase beyond current lock");
@@ -213,6 +231,8 @@ contract MutantBatz is Ownable, ERC721, ERC2981, SutterTreasury {
     _metadataLockedTo = tokenId;
   }
 
+  /// @notice Allows the contract owner to update the mint signer
+  /// @param newMintSigner The new authorised mint signer address
   function setMintSigner(address newMintSigner) external onlyOwner {
     emit MintSignerUpdated(newMintSigner);
     mintSigner = newMintSigner;
