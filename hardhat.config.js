@@ -18,7 +18,7 @@ module.exports = {
       chainId: 1337,
       gas: 'auto',
       forking: {
-        url: MAINNET_API_URI,
+        url: process.env.MAINNET_API_URI,
         blockNumber: 14194620
       }
     },
@@ -49,4 +49,3 @@ module.exports = {
     gasPriceApi: 'https://api.etherscan.io/api?module=proxy&action=eth_gasPrice',
   }
 };
- 
