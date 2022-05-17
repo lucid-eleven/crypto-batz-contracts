@@ -173,4 +173,30 @@ describe.only("Originals contract", function () {
       expect(counts[3]).to.be.closeTo(5000, 300, `Token 4 - ${counts[3]}`)
     });
   })
+
+  describe("Querying claim status", function () {
+    beforeEach(deployContract);
+    beforeEach(async function () {
+      await OriginalsContract.connect(owner).toggleMintActive();
+    })
+
+    it.only("Should return the claim status of a list of bats", async function () {
+      let batIds = Array.from(Array(100).keys()).map(x => x + 1);
+
+      await OriginalsContract.connect(addrs[0]).mint(batIds)
+
+      let batCanClaim = await OriginalsContract.canBatsClaim(batIds);
+      batCanClaim.forEach(claimable => expect(claimable).to.be.false);
+
+      let input = [25, 52, 123, 101, 100, 32, 1];
+      batCanClaim = await OriginalsContract.canBatsClaim(input);
+      expect(batCanClaim[0]).to.be.false;
+      expect(batCanClaim[1]).to.be.false;
+      expect(batCanClaim[2]).to.be.true;
+      expect(batCanClaim[3]).to.be.true;
+      expect(batCanClaim[4]).to.be.false;
+      expect(batCanClaim[5]).to.be.false;
+      expect(batCanClaim[6]).to.be.false;
+    });
+  })
 });

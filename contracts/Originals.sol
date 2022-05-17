@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: None
-pragma solidity ^0.8.8;
+pragma solidity 0.8.8;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "erc721a/contracts/ERC721A.sol";
@@ -17,7 +17,7 @@ contract Originals is ERC721A, Ownable, ERC2981 {
   bool public mintActive;
 
   // Keeps track of whether each CryptoBat has been used to claim
-  mapping(uint256 => bool) batClaimed;
+  mapping(uint256 => bool) private batClaimed;
 
   // Token URI for unreveleaed artwork
   string private defaultTokenURI = "ipfs://hash";
@@ -54,6 +54,25 @@ contract Originals is ERC721A, Ownable, ERC2981 {
     }
 
     _safeMint(msg.sender, tokenIds.length);
+  }
+
+  /// @notice Check if the list of CryptoBatz can are eligible to claim an Ozzy Original
+  /// @param tokenIds an array of tokenIds to check
+  /// @return an array of bool, true = bat can still claim
+  function canBatsClaim(uint256[] calldata tokenIds)
+    external
+    view
+    returns (bool[] memory)
+  {
+    require(tokenIds.length > 0, "Empty array");
+
+    bool[] memory canClaim = new bool[](tokenIds.length);
+
+    for (uint256 i = 0; i < tokenIds.length; i++) {
+      canClaim[i] = !batClaimed[tokenIds[i]];
+    }
+
+    return canClaim;
   }
 
   function tokenURI(uint256 tokenId)
