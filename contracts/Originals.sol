@@ -20,9 +20,15 @@ contract Originals is ERC721A, Ownable, ERC2981 {
   mapping(uint256 => bool) private batClaimed;
 
   // Token URI for unreveleaed artwork
-  string private defaultTokenURI = "ipfs://hash";
+  string private defaultTokenURI =
+    "ipfs://QmNVxVPgnC5axSzgfiHgQycxwt9f3jSTJz3wKXFxiJgB7P";
   // Token URIs for the 4 Ozzy Originals artworks
-  string[] private tokenURIs = ["ipfs://1", "ipfs://2", "ipfs://3", "ipfs://4"];
+  string[] private tokenURIs = [
+    "ipfs://QmTBHj4cYsWzynyk2V2Ahs3GtpViCQVki8KBywS3rev9L9",
+    "ipfs://QmPJ2nEgGNQyxtwmMuJ9s4LLFfAjjqJzoFWVLFB7L2scNb",
+    "ipfs://QmR78rztM4n9axyRPuz4aEPYtgyVtsNUs1sb7rNbqh4Ty9",
+    "ipfs://QmRUUZQVcGAqFXKqtvWTs7P66qDrdNZzpPs75FtGfYrFHp"
+  ];
 
   // These precalculated vectors are for distributing the 4 artworks randomly according to the following probabilities
   // 1 - 1%, 2 - 15%, 3 - 31%, 4 - 53%
@@ -36,7 +42,7 @@ contract Originals is ERC721A, Ownable, ERC2981 {
     ERC721A("Originals by Ozzy Osbourne", "OZZY")
   {
     CryptoBatz = IERC721(cryptoBatzAddress);
-    _setRoyalties(address(this), 750); // 7.5% royalties, TODO replace address with actual royalty payout address for Ozzy TBD
+    _setRoyalties(0x86Ca2299e82765fC6057Da161De655CE5575d7BC, 750); // 7.5% royalties
   }
 
   /// @dev Each CryptoBatz Id can only be claimed once, and must be owned by the tx sender

@@ -68,7 +68,7 @@ describe.only("Originals contract", function () {
     it("Should set the royalties to pay into current contract at 7.5%", async function () {
       let royaltyInfo = await OriginalsContract.royaltyInfo(1, 100);
 
-      expect(royaltyInfo[0]).to.equal(OriginalsContract.address);
+      expect(royaltyInfo[0]).to.equal("0x86Ca2299e82765fC6057Da161De655CE5575d7BC");
       expect(royaltyInfo[1]).to.equal(ethers.BigNumber.from("75").div(10));
     });
   });
@@ -124,7 +124,7 @@ describe.only("Originals contract", function () {
       );
 
       for (let i = 1; i < 11; i++) {
-        expect(await OriginalsContract.tokenURI(i)).to.equal("ipfs://hash")
+        expect(await OriginalsContract.tokenURI(i)).to.equal("ipfs://QmNVxVPgnC5axSzgfiHgQycxwt9f3jSTJz3wKXFxiJgB7P")
       }
     });
 
@@ -159,18 +159,19 @@ describe.only("Originals contract", function () {
 
       await OriginalsContract.connect(owner).setRandomizedSeed();
 
-      let counts = [0, 0, 0, 0];
+      let counts = {};
       for (let i = 1; i <= 10000; i++) {
         let uri = await OriginalsContract.tokenURI(i);
-        counts[Number(uri.slice(-1)) - 1]++;
+        if (!(uri in counts)) counts[uri] = 0;
+        counts[uri]++;
       }
 
       console.log(counts);
 
-      expect(counts[0]).to.be.closeTo(100, 10, `Token 1 - ${counts[0]}`)
-      expect(counts[1]).to.be.closeTo(1500, 100, `Token 2 - ${counts[1]}`)
-      expect(counts[2]).to.be.closeTo(3000, 100, `Token 3 - ${counts[2]}`)
-      expect(counts[3]).to.be.closeTo(5000, 300, `Token 4 - ${counts[3]}`)
+      expect(counts["ipfs://QmTBHj4cYsWzynyk2V2Ahs3GtpViCQVki8KBywS3rev9L9"]).to.be.closeTo(100, 10, `Token 1 - ${counts[0]}`)
+      expect(counts["ipfs://QmPJ2nEgGNQyxtwmMuJ9s4LLFfAjjqJzoFWVLFB7L2scNb"]).to.be.closeTo(1500, 100, `Token 2 - ${counts[1]}`)
+      expect(counts["ipfs://QmR78rztM4n9axyRPuz4aEPYtgyVtsNUs1sb7rNbqh4Ty9"]).to.be.closeTo(3000, 100, `Token 3 - ${counts[2]}`)
+      expect(counts["ipfs://QmRUUZQVcGAqFXKqtvWTs7P66qDrdNZzpPs75FtGfYrFHp"]).to.be.closeTo(5000, 300, `Token 4 - ${counts[3]}`)
     });
   })
 
@@ -180,7 +181,7 @@ describe.only("Originals contract", function () {
       await OriginalsContract.connect(owner).toggleMintActive();
     })
 
-    it.only("Should return the claim status of a list of bats", async function () {
+    it("Should return the claim status of a list of bats", async function () {
       let batIds = Array.from(Array(100).keys()).map(x => x + 1);
 
       await OriginalsContract.connect(addrs[0]).mint(batIds)
